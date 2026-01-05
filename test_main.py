@@ -4,6 +4,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from main import compute_avg_final_score, count_unique_students
+
+input_filename = "test_scores.csv"
+
 def test_script_output():
     repo_root = Path(__file__).resolve().parents[1]
     print("repo: " + str(repo_root))
@@ -32,3 +36,11 @@ def test_script_output():
         # TODO: write more assertions here
         assert main_output["average_final"] == 262/3
         assert main_output["unique_students"] == 3
+
+def test_final_score_average():
+    result = compute_avg_final_score(input_filename)
+    assert result == 262/3
+
+def test_count_unique_students():
+    result = count_unique_students(input_filename)
+    assert result == 3
