@@ -12,6 +12,7 @@ average_final = 0.0
 unique_students = 0
 total_scores = 0
 final_count = 0
+student_set = set()
 
 with open(input_filename) as f:
     reader = csv.DictReader(f)
@@ -24,10 +25,11 @@ with open(input_filename) as f:
             total_scores = total_scores + float(row["score"])
             final_count = final_count + 1
         # TODO: unique student count
+        student_set.add(row["student_id"])
+        unique_students = len(student_set)
 
-    unique_students = final_count
-    average_final = (total_scores / unique_students)
 
+    average_final = (total_scores / final_count)
 
 if os.path.exists(output_filename):
     os.remove(output_filename)
