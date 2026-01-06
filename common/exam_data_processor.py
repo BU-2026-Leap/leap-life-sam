@@ -1,4 +1,4 @@
-from contracts import DataProcessor, ExamScore
+from common.contracts import DataProcessor, ExamScore
 
 class ExamDataProcessor(DataProcessor):
 
