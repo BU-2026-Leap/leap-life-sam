@@ -1,224 +1,476 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Space Invaders</title>
-    <style>
-        body {
-            background-color: #222;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        canvas {
-            background-color: black;
-            border: 2px solid #0f0;
-            box-shadow: 0 0 20px #0f0;
-        }
-        #ui {
-            width: 800px;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            font-size: 20px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background: #0f0;
-            border: none;
-            cursor: pointer;
-            font-family: 'Courier New', Courier, monospace;
-            font-weight: bold;
-        }
-        button:hover { background: #0a0; color: white; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Space Invaders</title>
+  <style>
+    body {
+      background-color: #222;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: "Courier New", Courier, monospace;
+    }
+    canvas {
+      background-color: black;
+      border: 2px solid #0f0;
+      box-shadow: 0 0 20px #0f0;
+    }
+    #ui {
+      width: 800px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 20px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #0f0;
+      border: none;
+      cursor: pointer;
+      font-family: "Courier New", Courier, monospace;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #0a0;
+      color: white;
+    }
+  </style>
 </head>
 <body>
+  <h1>Space Invaders Arcade</h1>
 
-    <h1>Space Invaders Arcade</h1>
+  <div id="ui">
+    <span>Score: <span id="score">0</span></span>
+    <span>Level: <span id="level">1</span></span>
+    <span>World Record: <span id="highScore">{{ high_score }}</span> ({{ champion }})</span>
+  </div>
 
-    <div id="ui">
-        <span>Score: <span id="score">0</span></span>
-        <span>World Record: <span id="highScore">{{ high_score }}</span> ({{ champion }})</span>
-    </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <br />
+  <button onclick="startGame()">Start New Game</button>
 
-    <br>
-    <button onclick="startGame()">Start New Game</button>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
 
-        // Game State
-        let gameRunning = false;
-        let score = 0;
+    let gameRunning = false;
+    let score = 0;
 
-        // Player
-        const player = { x: 375, y: 550, width: 50, height: 30, speed: 5, color: '#0f0' };
 
-        // Bullets & Enemies
-        let bullets = [];
-        let enemies = [];
-        let enemySpeed = 1;
-        let enemyDirection = 1;
+    let level = 1;
+    const baseEnemySpeed = 1;
+    let enemySpeed = baseEnemySpeed;
+    let enemyDirection = 1;
 
-        // Input
-        const keys = {};
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
-                e.preventDefault();
+    let inBossFight = false;
+    let boss = null;
+
+    // Player
+    const player = { x: 375, y: 550, width: 50, height: 30, speed: 5, color: "#0f0" };
+
+    // Bullets & Enemies
+    let bullets = [];
+    let enemies = [];
+
+    // Input
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      keys[e.code] = true;
+      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.code) > -1) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener("keyup", (e) => (keys[e.code] = false));
+
+    // Shooting logic
+    let lastShotTime = 0;
+    const shootCooldown = 300;
+
+    function spawnLevel() {
+      const phase = ((level - 1) % 3) + 1; // 1,2,3 repeating
+
+      document.getElementById("level").innerText = level;
+
+      bullets = [];
+      enemies = [];
+      boss = null;
+      inBossFight = false;
+
+      enemyDirection = 1;
+
+      if (phase === 1) {
+        enemySpeed = baseEnemySpeed;
+        spawnDefaultWave();
+      } else if (phase === 2) {
+        enemySpeed = baseEnemySpeed * 1.5;
+        spawnAlternateWave();
+      } else {
+        inBossFight = true;
+        spawnBoss();
+      }
+    }
+
+    function spawnDefaultWave() {
+      enemies = [];
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 8; col++) {
+          enemies.push({
+            type: "default",
+            x: 50 + col * 80,
+            y: 30 + row * 50,
+            width: 40,
+            height: 30,
+            hp: 1,
+          });
+        }
+      }
+    }
+
+    // Alternate wave: figure-8 pattern for a bit, then starts descending
+    function spawnAlternateWave() {
+      enemies = [];
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 6; col++) {
+          const startX = 120 + col * 90;
+          const startY = 70 + row * 70;
+
+          enemies.push({
+            type: "alternate",
+
+            // "anchor" for figure-8
+            baseX: startX,
+            baseY: startY,
+
+            // actual draw/collision position
+            x: startX,
+            y: startY,
+
+            width: 46,
+            height: 34,
+
+            hp: 2, // SPEC: 2 health points
+
+            mode: "figure8", // "figure8" -> "descend"
+            t: Math.random() * Math.PI * 2,
+            figureFrames: 240, // ~4 seconds at 60fps
+          });
+        }
+      }
+    }
+
+    // Boss: single enemy, more health, different movement
+    function spawnBoss() {
+      const hp = 60 + Math.floor(level * 6); // scales up slowly
+      boss = {
+        x: 300,
+        y: 90,
+        width: 220,
+        height: 90,
+        hp: hp,
+        maxHp: hp,
+
+        // movement parameters
+        t: 0,
+        vx: 2.8, // horizontal drift speed
+      };
+    }
+
+
+    function updateDefaultEnemy(enemy) {
+      enemy.x += enemySpeed * enemyDirection;
+      // default y changes only on wall-bounce
+    }
+
+    function handleDefaultWallBounce() {
+      const defaults = enemies.filter((e) => e.type === "default");
+      if (defaults.length === 0) return;
+
+      let hitWall = false;
+      defaults.forEach((enemy) => {
+        if (enemy.x + enemy.width > canvas.width || enemy.x < 0) hitWall = true;
+      });
+
+      if (hitWall) {
+        enemyDirection *= -1;
+        defaults.forEach((enemy) => (enemy.y += 20));
+      }
+    }
+
+
+    function updateAlternateEnemy(enemy) {
+      const speedMult = 1.5;
+
+      if (enemy.mode === "figure8") {
+
+        const A = 55; // width of loops
+        const B = 28; // height of loops
+
+        enemy.t += 0.05 * speedMult;
+        enemy.x = enemy.baseX + A * Math.sin(enemy.t);
+        enemy.y = enemy.baseY + B * Math.sin(2 * enemy.t);
+
+        enemy.figureFrames -= 1;
+        if (enemy.figureFrames <= 0) {
+          enemy.mode = "descend";
+        }
+      } else {
+        // descend steadily after figure-8
+        enemy.y += 0.7 * speedMult;
+        // small wobble so they still feel "alive"
+        enemy.t += 0.03 * speedMult;
+        enemy.x += 0.25 * Math.sin(enemy.t);
+      }
+    }
+
+    // Boss movement: "swoop-ish" sine side-to-side + occasional drop
+    function updateBoss() {
+      if (!boss) return;
+
+      boss.t += 0.02;
+
+      // Horizontal movement: combine a slow sine and a steady drift
+      boss.x += boss.vx;
+      boss.x += Math.sin(boss.t) * 0.8;
+
+      // bounce on walls
+      if (boss.x <= 0) {
+        boss.x = 0;
+        boss.vx *= -1;
+        boss.y += 10;
+      }
+      if (boss.x + boss.width >= canvas.width) {
+        boss.x = canvas.width - boss.width;
+        boss.vx *= -1;
+        boss.y += 10;
+      }
+
+      // Gentle vertical bob
+      boss.y += Math.sin(boss.t * 2) * 0.4;
+
+      // keep boss from going too low instantly
+      if (boss.y < 40) boss.y = 40;
+      if (boss.y > 250) boss.y = 250;
+    }
+
+
+    function rectsOverlap(a, b) {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    function handleBulletCollisions() {
+      // iterate backwards to safely splice
+      for (let b = bullets.length - 1; b >= 0; b--) {
+        const bullet = bullets[b];
+
+        // Boss collision
+        if (inBossFight && boss) {
+          if (rectsOverlap(bullet, boss)) {
+            bullets.splice(b, 1);
+            boss.hp -= 1;
+
+            // score per hit + bonus on kill
+            score += 5;
+            if (boss.hp <= 0) {
+              score += 250;
+              boss = null;
+              inBossFight = false;
+              level += 1;
+              spawnLevel();
             }
+
+            document.getElementById("score").innerText = score;
+          }
+          continue;
+        }
+
+        // Enemy collision
+        for (let e = enemies.length - 1; e >= 0; e--) {
+          const enemy = enemies[e];
+          if (rectsOverlap(bullet, enemy)) {
+            bullets.splice(b, 1);
+
+            enemy.hp -= 1;
+            if (enemy.hp <= 0) {
+              enemies.splice(e, 1);
+              score += enemy.type === "alternate" ? 20 : 10;
+            } else {
+              // damaged but not dead (alternate has 2 HP)
+              score += 5;
+            }
+
+            document.getElementById("score").innerText = score;
+            break; // bullet is gone, stop checking this bullet
+          }
+        }
+      }
+    }
+
+    function checkGameOver() {
+      // If any enemy reaches player line -> game over
+      enemies.forEach((enemy) => {
+        if (enemy.y + enemy.height >= player.y) gameOver();
+      });
+
+      // Boss reaches player line -> game over
+      if (boss && boss.y + boss.height >= player.y) gameOver();
+    }
+
+    function update() {
+      if (!gameRunning) return;
+
+      // Move Player
+      if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
+      if (keys["ArrowRight"] && player.x + player.width < canvas.width) player.x += player.speed;
+
+      // Fire Bullet
+      if (keys["Space"]) {
+        const now = Date.now();
+        if (now - lastShotTime > shootCooldown) {
+          bullets.push({ x: player.x + 22, y: player.y, width: 6, height: 15, color: "#ff0" });
+          lastShotTime = now;
+        }
+      }
+
+      // Update Bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        bullets[i].y -= 7;
+        if (bullets[i].y < 0) bullets.splice(i, 1);
+      }
+
+      // Update Enemies or Boss
+      if (inBossFight && boss) {
+        updateBoss();
+      } else {
+        // update each enemy based on type
+        enemies.forEach((enemy) => {
+          if (enemy.type === "alternate") updateAlternateEnemy(enemy);
+          else updateDefaultEnemy(enemy);
         });
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // Shooting logic
-        let lastShotTime = 0;
-        const shootCooldown = 300;
+        // wall bounce only affects default enemies (alternate ignores this)
+        handleDefaultWallBounce();
 
-        function update() {
-            if (!gameRunning) return;
-
-            // Move Player
-            if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
-            if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
-
-            // Fire Bullet
-            if (keys['Space']) {
-                const now = Date.now();
-                if (now - lastShotTime > shootCooldown) {
-                    bullets.push({ x: player.x + 22, y: player.y, width: 6, height: 15, color: '#ff0' });
-                    lastShotTime = now;
-                }
-            }
-
-            // Update Bullets
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                bullets[i].y -= 7;
-                if (bullets[i].y < 0) bullets.splice(i, 1);
-            }
-
-            // Update Enemies
-            let hitWall = false;
-            enemies.forEach(enemy => {
-                enemy.x += enemySpeed * enemyDirection;
-                if (enemy.x + enemy.width > canvas.width || enemy.x < 0) hitWall = true;
-            });
-
-            if (hitWall) {
-                enemyDirection *= -1;
-                enemies.forEach(enemy => enemy.y += 20);
-            }
-
-            // Collisions
-            bullets.forEach((bullet, bIndex) => {
-                enemies.forEach((enemy, eIndex) => {
-                    if (
-                        bullet.x < enemy.x + enemy.width &&
-                        bullet.x + bullet.width > enemy.x &&
-                        bullet.y < enemy.y + enemy.height &&
-                        bullet.y + bullet.height > enemy.y
-                    ) {
-                        enemies.splice(eIndex, 1);
-                        bullets.splice(bIndex, 1);
-                        score += 10;
-                        document.getElementById('score').innerText = score;
-                    }
-                });
-            });
-
-            // Game Over Checks
-            enemies.forEach(enemy => {
-                if (enemy.y + enemy.height >= player.y) gameOver();
-            });
-            if (enemies.length === 0) {
-                spawnEnemies();
-                enemySpeed += 0.5;
-            }
+        // If wave cleared, go to next level
+        if (enemies.length === 0) {
+          level += 1;
+          spawnLevel();
         }
+      }
 
-        function draw() {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Collisions
+      handleBulletCollisions();
 
-            if (!gameRunning) {
-                ctx.fillStyle = 'white';
-                ctx.font = '30px Courier';
-                ctx.textAlign = "center";
-                ctx.fillText("PRESS START TO PLAY", canvas.width/2, canvas.height/2);
-                if (score > 0) {
-                    ctx.fillText("Final Score: " + score, canvas.width/2, canvas.height/2 + 40);
-                }
-                return;
-            }
+      // Game Over checks
+      checkGameOver();
+    }
 
-            // Draw entities
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-            bullets.forEach(b => {
-                ctx.fillStyle = b.color;
-                ctx.fillRect(b.x, b.y, b.width, b.height);
-            });
-            enemies.forEach(e => {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(e.x, e.y, e.width, e.height);
-            });
+    function draw() {
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (!gameRunning) {
+        ctx.fillStyle = "white";
+        ctx.font = "30px Courier";
+        ctx.textAlign = "center";
+        ctx.fillText("PRESS START TO PLAY", canvas.width / 2, canvas.height / 2);
+        if (score > 0) {
+          ctx.fillText("Final Score: " + score, canvas.width / 2, canvas.height / 2 + 40);
         }
+        return;
+      }
 
-        function gameLoop() {
-            update();
-            draw();
-            requestAnimationFrame(gameLoop);
+      // Draw player
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+
+      // Draw bullets
+      bullets.forEach((b) => {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+      });
+
+      // Draw enemies
+      enemies.forEach((e) => {
+        if (e.type === "alternate") {
+          // alternate: purple
+          ctx.fillStyle = "#a0f";
+        } else {
+          // default: red
+          ctx.fillStyle = "red";
         }
+        ctx.fillRect(e.x, e.y, e.width, e.height);
 
-        function spawnEnemies() {
-            enemies = [];
-            for (let row = 0; row < 3; row++) {
-                for (let col = 0; col < 8; col++) {
-                    enemies.push({
-                        x: 50 + col * 80,
-                        y: 30 + row * 50,
-                        width: 40,
-                        height: 30
-                    });
-                }
-            }
+        // tiny HP pips for alternate (optional visual)
+        if (e.type === "alternate") {
+          ctx.fillStyle = "white";
+          for (let i = 0; i < e.hp; i++) {
+            ctx.fillRect(e.x + 4 + i * 10, e.y - 6, 8, 4);
+          }
         }
+      });
 
-        function gameOver() {
-            gameRunning = false;
-            let name = prompt("GAME OVER! Score: " + score + "\nEnter your name for the scoreboard:");
+      // Draw boss
+      if (boss) {
+        ctx.fillStyle = "#0ff"; // cyan boss
+        ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+      }
+    }
 
-            if (name) {
-                fetch('/submit_score', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ name: name, score: score })
-                }).then(() => {
-                    window.location.reload();
-                });
-            }
-        }
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
 
-        function startGame() {
-            score = 0;
-            document.getElementById('score').innerText = '0';
-            bullets = [];
-            enemies = [];
-            enemySpeed = 1;
-            player.x = 375;
-            spawnEnemies();
-            gameRunning = true;
-            document.activeElement.blur();
-        }
+    function gameOver() {
+      gameRunning = false;
+      const name = prompt("GAME OVER! Score: " + score + "\nEnter your name for the scoreboard:");
 
-        gameLoop();
+      if (name) {
+        fetch("/submit_score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name, score: score }),
+        }).then(() => {
+          window.location.reload();
+        });
+      }
+    }
 
-    </script>
+    function startGame() {
+      score = 0;
+      level = 1;
+      document.getElementById("score").innerText = "0";
+      document.getElementById("level").innerText = "1";
+
+      bullets = [];
+      enemies = [];
+      boss = null;
+      inBossFight = false;
+
+      enemySpeed = baseEnemySpeed;
+      enemyDirection = 1;
+
+      player.x = 375;
+
+      spawnLevel();
+      gameRunning = true;
+      document.activeElement.blur();
+    }
+
+    gameLoop();
+  </script>
 </body>
 </html>
