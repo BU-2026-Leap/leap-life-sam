@@ -10,7 +10,7 @@ def build_html(stats):
     <title>Summary of All</title>
   </head>
   <body>
-    <h1>Student Scores:</h1>
+    <h1>Student Scores!</h1>
     <ul>
       <li><strong>Average score:</strong> {stats.average_final}</li>
       <li><strong>Unique students:</strong> {stats.unique_students}</li>
