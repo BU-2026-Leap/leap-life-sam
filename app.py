@@ -7,7 +7,7 @@ app.secret_key = os.urandom(24)
 
 # AWS Lambda requires us to write to the /tmp folder
 # If running locally, this file will just appear in your temp folder
-DB_PATH = '/tmp/game_database.db'
+DB_PATH = "C:\\Users\\skoch\\LEAP-LIFE\\leap-life-sam\\game_database.db"
 
 
 def get_db_connection():
