@@ -74,6 +74,13 @@
 
     // Player
     const player = { x: 375, y: 550, width: 50, height: 30, speed: 5, color: "#0f0" };
+    // const newImage = document.createElement('img');
+    // newImage.src = '../assets/player.png';
+    // newImage.alt = 'A dynamically added image';
+    // document.body.appendChild(newImage);
+    const img = new Image();
+    img.src="https://i.ibb.co/Hfbz4yXh/New-Piskel.png"
+
 
     // Bullets & Enemies
     let bullets = [];
@@ -155,7 +162,7 @@
             width: 46,
             height: 34,
 
-            hp: 2, // SPEC: 2 health points
+            hp: 1, // SPEC: 2 health points
 
             mode: "figure8", // "figure8" -> "descend"
             t: Math.random() * Math.PI * 2,
@@ -180,6 +187,8 @@
         t: 0,
         vx: 2.8, // horizontal drift speed
       };
+      const boss_img = new Image();
+      boss_img.src="https://i.ibb.co/Kz2b4Bf0/Selim-1-of-1-e1523031348854-1024x1024-2.png"
     }
 
 
@@ -205,7 +214,7 @@
 
 
     function updateAlternateEnemy(enemy) {
-      const speedMult = 1.5;
+      const speedMult = 1;
 
       if (enemy.mode === "figure8") {
 
@@ -393,7 +402,8 @@
 
       // Draw player
       ctx.fillStyle = player.color;
-      ctx.fillRect(player.x, player.y, player.width, player.height);
+      //ctx.fillRect(player.x, player.y, player.width, player.height);
+      ctx.drawImage(img, player.x, player.y)
 
       // Draw bullets
       bullets.forEach((b) => {
