@@ -2,196 +2,223 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Invaders Game</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+    <title>Space Invaders</title>
     <style>
         body {
-            margin: 0;
-            overflow: hidden;
-        }
-        #game-over {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: #222;
             color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Courier New', Courier, monospace;
         }
-        #game-over button {
-            margin-top: 10px;
-            padding: 10px;
+        canvas {
+            background-color: black;
+            border: 2px solid #0f0;
+            box-shadow: 0 0 20px #0f0;
         }
-        #score-container {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-size: 24px;
+        #ui {
+            width: 800px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 20px;
         }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #0f0;
+            border: none;
+            cursor: pointer;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+        }
+        button:hover { background: #0a0; color: white; }
     </style>
 </head>
 <body>
-    <h2>Welcome, {{ username }}!</h2>
-    <div id="game-container"></div>
-    <div id="score-container">Score: <span id="score">0</span><br>High Score: <span id="high-score">{{ high_score }}</span></div>
-    <div id="game-over">
-        <h1>Game Over!</h1>
-        <p>Your final score: <span id="final-score"></span></p>
-        <p>Your high score: <span id="final-high-score"></span></p>
-        <button onclick="window.location.href='{{ url_for('home') }}'">Return to Home</button>
+
+    <h1>Space Invaders Arcade</h1>
+
+    <div id="ui">
+        <span>Score: <span id="score">0</span></span>
+        <span>World Record: <span id="highScore">{{ high_score }}</span> ({{ champion }})</span>
     </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <br>
+    <button onclick="startGame()">Start New Game</button>
+
     <script>
-        var config = {
-            type: Phaser.AUTO,
-            width: 800,
-            height: 600,
-            parent: 'game-container',
-            backgroundColor: '#00FF00', // Green screen background
-            physics: {
-                default: 'arcade',
-                arcade: {
-                    gravity: { y: 0 },
-                    debug: false
-                }
-            },
-            scene: {
-                preload: preload,
-                create: create,
-                update: update
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State
+        let gameRunning = false;
+        let score = 0;
+
+        // Player
+        const player = { x: 375, y: 550, width: 50, height: 30, speed: 5, color: '#0f0' };
+
+        // Bullets & Enemies
+        let bullets = [];
+        let enemies = [];
+        let enemySpeed = 1;
+        let enemyDirection = 1;
+
+        // Input
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
             }
-        };
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        var player;
-        var cursors;
-        var wasd;
-        var bullets;
-        var enemies;
-        var score = 0;
-        var scoreText;
-        var highScore = parseInt(document.getElementById('high-score').innerText);
-        var game = new Phaser.Game(config);
-
-        function preload() {
-            this.load.image('bullet', 'https://labs.phaser.io/assets/sprites/bullets/bullet11.png');
-        }
-
-        function create() {
-            player = this.add.triangle(400, 500, 0, 50, 25, 0, 50, 50, 0xff69b4); // Hot pink triangle
-            this.physics.add.existing(player);
-            player.body.setCollideWorldBounds(true);
-
-            enemies = this.physics.add.group({
-                key: 'enemy',
-                repeat: 5,
-                setXY: { x: 100, y: 100, stepX: 120 },
-                createCallback: function (enemy) {
-                    enemy.setVelocityX(100); // Initial movement speed for enemies
-                    enemy.health = 1; // Set health for each enemy
-                }
-            });
-
-            bullets = this.physics.add.group({
-                defaultKey: 'bullet',
-                maxSize: 10
-            });
-
-            cursors = this.input.keyboard.createCursorKeys();
-            wasd = this.input.keyboard.addKeys({
-                up: Phaser.Input.Keyboard.KeyCodes.W,
-                down: Phaser.Input.Keyboard.KeyCodes.S,
-                left: Phaser.Input.Keyboard.KeyCodes.A,
-                right: Phaser.Input.Keyboard.KeyCodes.D
-            });
-            this.time.addEvent({ delay: 200, callback: shootBullet, callbackScope: this, loop: true });
-
-            // Add collision detection between bullets and enemies
-            this.physics.add.overlap(bullets, enemies, damageEnemy, null, this);
-
-            // Add collision detection between player and enemies
-            this.physics.add.collider(player, enemies, playerHit, null, this);
-
-            // Display the live score
-            scoreText = document.getElementById('score');
-        }
+        // Shooting logic
+        let lastShotTime = 0;
+        const shootCooldown = 300;
 
         function update() {
-            // Arrow key and WASD controls for player movement
-            if (cursors.left.isDown || wasd.left.isDown) {
-                player.body.setVelocityX(-200);
-            } else if (cursors.right.isDown || wasd.right.isDown) {
-                player.body.setVelocityX(200);
-            } else {
-                player.body.setVelocityX(0);
-            }
+            if (!gameRunning) return;
 
-            if (cursors.up.isDown || wasd.up.isDown) {
-                player.body.setVelocityY(-200);
-            } else if (cursors.down.isDown || wasd.down.isDown) {
-                player.body.setVelocityY(200);
-            } else {
-                player.body.setVelocityY(0);
-            }
+            // Move Player
+            if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+            if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
 
-            // Update enemy movement
-            enemies.children.iterate(function (enemy) {
-                if (enemy.x <= 0) {
-                    enemy.setVelocityX(100); // Change direction when hitting the left edge
-                } else if (enemy.x >= 800) {
-                    enemy.setVelocityX(-100); // Change direction when hitting the right edge
+            // Fire Bullet
+            if (keys['Space']) {
+                const now = Date.now();
+                if (now - lastShotTime > shootCooldown) {
+                    bullets.push({ x: player.x + 22, y: player.y, width: 6, height: 15, color: '#ff0' });
+                    lastShotTime = now;
                 }
+            }
+
+            // Update Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= 7;
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+
+            // Update Enemies
+            let hitWall = false;
+            enemies.forEach(enemy => {
+                enemy.x += enemySpeed * enemyDirection;
+                if (enemy.x + enemy.width > canvas.width || enemy.x < 0) hitWall = true;
+            });
+
+            if (hitWall) {
+                enemyDirection *= -1;
+                enemies.forEach(enemy => enemy.y += 20);
+            }
+
+            // Collisions
+            bullets.forEach((bullet, bIndex) => {
+                enemies.forEach((enemy, eIndex) => {
+                    if (
+                        bullet.x < enemy.x + enemy.width &&
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + bullet.height > enemy.y
+                    ) {
+                        enemies.splice(eIndex, 1);
+                        bullets.splice(bIndex, 1);
+                        score += 10;
+                        document.getElementById('score').innerText = score;
+                    }
+                });
+            });
+
+            // Game Over Checks
+            enemies.forEach(enemy => {
+                if (enemy.y + enemy.height >= player.y) gameOver();
+            });
+            if (enemies.length === 0) {
+                spawnEnemies();
+                enemySpeed += 0.5;
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!gameRunning) {
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Courier';
+                ctx.textAlign = "center";
+                ctx.fillText("PRESS START TO PLAY", canvas.width/2, canvas.height/2);
+                if (score > 0) {
+                    ctx.fillText("Final Score: " + score, canvas.width/2, canvas.height/2 + 40);
+                }
+                return;
+            }
+
+            // Draw entities
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            bullets.forEach(b => {
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x, b.y, b.width, b.height);
+            });
+            enemies.forEach(e => {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(e.x, e.y, e.width, e.height);
             });
         }
 
-        function shootBullet() {
-            var bullet = bullets.get(player.x, player.y);
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
 
-            if (bullet) {
-                bullet.setActive(true);
-                bullet.setVisible(true);
-                bullet.setVelocityY(-300);
+        function spawnEnemies() {
+            enemies = [];
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 8; col++) {
+                    enemies.push({
+                        x: 50 + col * 80,
+                        y: 30 + row * 50,
+                        width: 40,
+                        height: 30
+                    });
+                }
             }
         }
 
-        function damageEnemy(bullet, enemy) {
-            bullet.disableBody(true, true);
-            enemy.health -= 1; // Reduce enemy health by 1
-            if (enemy.health <= 0) {
-                enemy.disableBody(true, true);
-                score += 1; // Increase score for each enemy destroyed
-                scoreText.innerText = score; // Update live score display
+        function gameOver() {
+            gameRunning = false;
+            let name = prompt("GAME OVER! Score: " + score + "\nEnter your name for the scoreboard:");
+
+            if (name) {
+                fetch('/submit_score', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name, score: score })
+                }).then(() => {
+                    window.location.reload();
+                });
             }
         }
 
-        function playerHit(player, enemy) {
-            // Handle player being hit by an enemy (e.g., end game or lose life)
-            this.physics.pause(); // Pause the game
-            document.getElementById('final-score').innerText = score;
-            if (score > highScore) {
-                highScore = score;
-                document.getElementById('high-score').innerText = highScore;
-                document.getElementById('final-high-score').innerText = highScore;
-                updateHighScoreInDatabase(highScore);
-            } else {
-                document.getElementById('final-high-score').innerText = highScore;
-            }
-            document.getElementById('game-over').style.display = 'block';
+        function startGame() {
+            score = 0;
+            document.getElementById('score').innerText = '0';
+            bullets = [];
+            enemies = [];
+            enemySpeed = 1;
+            player.x = 375;
+            spawnEnemies();
+            gameRunning = true;
+            document.activeElement.blur();
         }
 
-        function updateHighScoreInDatabase(newHighScore) {
-            fetch('/update_high_score', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ high_score: newHighScore })
-            });
-        }
+        gameLoop();
+
     </script>
-    <a href="{{ url_for('home') }}">Back to Home</a>
 </body>
 </html>
